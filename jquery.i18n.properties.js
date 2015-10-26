@@ -1,15 +1,16 @@
 /******************************************************************************
  * jquery.i18n.properties
- * 
- * Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
+ *
+ * Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and
  * MIT (http://dev.jquery.com/browser/trunk/jquery/MIT-LICENSE.txt) licenses.
- * 
- * @version     1.0.x
+ *
+ * @version     1.0.9-async
  * @author      Nuno Fernandes
+ * @author      Simon Wenmouth (asynchronously request message property bundles; depends jQuery >= 1.6 for Deferred.always)
  * @url         www.codingwithcoffee.com
  * @inspiration Localisation assistance for jQuery (http://keith-wood.name/localisation.html)
  *              by Keith Wood (kbwood{at}iinet.com.au) June 2007
- * 
+ *
  *****************************************************************************/
 
 (function($) {
@@ -17,23 +18,23 @@ $.i18n = {};
 
 /** Map holding bundle keys (if mode: 'map') */
 $.i18n.map = {};
-    
+
 /**
  * Load and parse message bundle files (.properties),
  * making bundles keys available as javascript variables.
- * 
+ *
  * i18n files are named <name>.js, or <name>_<language>.js or <name>_<language>_<country>.js
  * Where:
- *      The <language> argument is a valid ISO Language Code. These codes are the lower-case, 
- *      two-letter codes as defined by ISO-639. You can find a full list of these codes at a 
+ *      The <language> argument is a valid ISO Language Code. These codes are the lower-case,
+ *      two-letter codes as defined by ISO-639. You can find a full list of these codes at a
  *      number of sites, such as: http://www.loc.gov/standards/iso639-2/englangn.html
  *      The <country> argument is a valid ISO Country Code. These codes are the upper-case,
  *      two-letter codes as defined by ISO-3166. You can find a full list of these codes at a
  *      number of sites, such as: http://www.iso.ch/iso/en/prods-services/iso3166ma/02iso-3166-code-lists/list-en1.html
- * 
+ *
  * Sample usage for a bundles/Messages.properties bundle:
  * $.i18n.properties({
- *      name:      'Messages', 
+ *      name:      'Messages',
  *      language:  'en_US',
  *      path:      'bundles'
  * });
@@ -50,35 +51,40 @@ $.i18n.properties = function(settings) {
     var defaults = {
         name:           'Messages',
         language:       '',
-        path:           '',  
+        path:           '',
         mode:           'vars',
         cache:			false,
         encoding:       'UTF-8',
         callback:       null
     };
-    settings = $.extend(defaults, settings);    
+    settings = $.extend(defaults, settings);
     if(settings.language === null || settings.language == '') {
 	   settings.language = $.i18n.browserLang();
 	}
 	if(settings.language === null) {settings.language='';}
-	
+
 	// load and parse bundle files
 	var files = getFiles(settings.name);
+	var promises = [];
 	for(i=0; i<files.length; i++) {
 		// 1. load base (eg, Messages.properties)
-		loadAndParseFile(settings.path + files[i] + '.properties', settings);
+		promises.push(loadAndParseFile(settings.path + files[i] + '.properties', settings));
         // 2. with language code (eg, Messages_pt.properties)
 		if(settings.language.length >= 2) {
-            loadAndParseFile(settings.path + files[i] + '_' + settings.language.substring(0, 2) +'.properties', settings);
+            promises.push(loadAndParseFile(settings.path + files[i] + '_' + settings.language.substring(0, 2) +'.properties', settings));
 		}
 		// 3. with language code and country code (eg, Messages_pt_PT.properties)
         if(settings.language.length >= 5) {
-            loadAndParseFile(settings.path + files[i] + '_' + settings.language.substring(0, 5) +'.properties', settings);
+            promises.push(loadAndParseFile(settings.path + files[i] + '_' + settings.language.substring(0, 5) +'.properties', settings));
         }
 	}
-	
+
 	// call callback
-	if(settings.callback){ settings.callback(); }
+    $.when(promises).always(function () {
+	    if (settings.callback) {
+            settings.callback();
+        }
+    });
 };
 
 
@@ -90,11 +96,11 @@ $.i18n.prop = function(key /* Add parameters as function arguments as necessary 
 	var value = $.i18n.map[key];
 	if (value == null)
 		return '[' + key + ']';
-	
+
 //	if(arguments.length < 2) // No arguments.
 //    //if(key == 'spv.lbl.modified') {alert(value);}
 //		return value;
-	
+
 //	if (!$.isArray(placeHolderValues)) {
 //		// If placeHolderValues is not an array, make it into one.
 //		placeHolderValues = [placeHolderValues];
@@ -124,10 +130,10 @@ $.i18n.prop = function(key /* Add parameters as function arguments as necessary 
 	 *   test.t6, p1, p2, p3 ==> a p2 b p1 c
 	 *   test.t7 ==> a quoted \ s	tringy 		 x
 	 */
-	
+
 	var i;
 	if (typeof(value) == 'string') {
-        // Handle escape characters. Done separately from the tokenizing loop below because escape characters are 
+        // Handle escape characters. Done separately from the tokenizing loop below because escape characters are
 		// active in quoted strings.
         i = 0;
         while ((i = value.indexOf('\\', i)) != -1) {
@@ -144,7 +150,7 @@ $.i18n.prop = function(key /* Add parameters as function arguments as necessary 
  		   else
  			   value = value.substring(0, i) + value.substring(i+1); // Quietly drop the character
         }
-		
+
 		// Lazily convert the string to a list of tokens.
 		var arr = [], j, index;
 		i = 0;
@@ -170,7 +176,7 @@ $.i18n.prop = function(key /* Add parameters as function arguments as necessary 
 							value = value.substring(0,j) + value.substring(++j);
 						}
 					}
-					
+
 					if (j == -1) {
 						// There is no end quote. Drop the start quote
 						value = value.substring(0,i) + value.substring(i+1);
@@ -203,21 +209,21 @@ $.i18n.prop = function(key /* Add parameters as function arguments as necessary 
 			else
 				i++;
 		}
-		
+
 		// Put the remainder of the no-empty line into the array.
 		if (value != "")
 			arr.push(value);
 		value = arr;
-		
+
 		// Make the array the value for the entry.
 		$.i18n.map[key] = arr;
 	}
-	
+
 	if (value.length == 0)
 		return "";
 	if (value.lengh == 1 && typeof(value[0]) == "string")
 		return value[0];
-	
+
 	var s = "";
 	for (i=0; i<value.length; i++) {
 		if (typeof(value[i]) == "string")
@@ -228,7 +234,7 @@ $.i18n.prop = function(key /* Add parameters as function arguments as necessary 
 		else
 			s += "{"+ value[i] +"}";
 	}
-	
+
 	return s;
 };
 
@@ -240,14 +246,14 @@ $.i18n.browserLang = function() {
 
 /** Load and parse .properties files */
 function loadAndParseFile(filename, settings) {
-	$.ajax({
+	return $.ajax({
         url:        filename,
         async:      false,
         cache:		settings.cache,
         contentType:'text/plain;charset='+ settings.encoding,
         dataType:   'text',
         success:    function(data, status) {
-        				parseData(data, settings.mode); 
+        				parseData(data, settings.mode);
 					}
     });
 }
@@ -271,11 +277,11 @@ function parseData(data, mode) {
                while(value.match(/\\$/)=="\\") {
                		value = value.substring(0, value.length - 1);
                		value += parameters[++i].replace( /\s\s*$/, '' ); // right trim
-               }               
+               }
                // Put values with embedded '='s back together
                for(var s=2;s<pair.length;s++){ value +='=' + pair[s]; }
                value = value.replace( /^\s\s*/, '' ).replace( /\s\s*$/, '' ); // trim
-               
+
                /** Mode: bundle keys in a map */
                if(mode == 'map' || mode == 'both') {
                    // handle unicode chars possibly left out
@@ -288,14 +294,14 @@ function parseData(data, mode) {
                    // add to map
                    $.i18n.map[name] = value;
                }
-               
+
                /** Mode: bundle keys as vars/functions */
                if(mode == 'vars' || mode == 'both') {
                    value = value.replace( /"/g, '\\"' ); // escape quotation mark (")
-                   
-                   // make sure namespaced key exists (eg, 'some.key') 
+
+                   // make sure namespaced key exists (eg, 'some.key')
                    checkKeyNamespace(name);
-                   
+
                    // value with variable substitutions
                    if(regPlaceHolder.test(value)) {
                        var parts = value.split(regPlaceHolder);
@@ -315,7 +321,7 @@ function parseData(data, mode) {
                        // process function body
                        var fnExpr = '"' + value.replace(regRepPlaceHolder, '"+v$1+"') + '"';
                        parsed += 'return ' + fnExpr + ';' + '};';
-                       
+
                    // simple value
                    }else{
                        parsed += name+'="'+value+'";';
@@ -379,7 +385,7 @@ function unescapeUnicode(str) {
 An ECMA-compliant, uniform cross-browser split method */
 var cbSplit;
 // avoid running twice, which would break `cbSplit._nativeSplit`'s reference to the native `split`
-if (!cbSplit) {    
+if (!cbSplit) {
   cbSplit = function(str, separator, limit) {
       // if `separator` is not a regex, use the native `split`
       if (Object.prototype.toString.call(separator) !== "[object RegExp]") {
@@ -388,7 +394,7 @@ if (!cbSplit) {
         else
           return cbSplit._nativeSplit.call(str, separator, limit);
       }
-  
+
       var output = [],
           lastLastIndex = 0,
           flags = (separator.ignoreCase ? "i" : "") +
@@ -396,12 +402,12 @@ if (!cbSplit) {
                   (separator.sticky     ? "y" : ""),
           separator = RegExp(separator.source, flags + "g"), // make `global` and avoid `lastIndex` issues by working with a copy
           separator2, match, lastIndex, lastLength;
-  
+
       str = str + ""; // type conversion
       if (!cbSplit._compliantExecNpcg) {
           separator2 = RegExp("^" + separator.source + "$(?!\\s)", flags); // doesn't need /g or /y, but they don't hurt
       }
-  
+
       /* behavior for `limit`: if it's...
       - `undefined`: no limit.
       - `NaN` or zero: return an empty array.
@@ -416,13 +422,13 @@ if (!cbSplit) {
               return [];
           }
       }
-  
+
       while (match = separator.exec(str)) {
           lastIndex = match.index + match[0].length; // `separator.lastIndex` is not reliable cross-browser
-  
+
           if (lastIndex > lastLastIndex) {
               output.push(str.slice(lastLastIndex, match.index));
-  
+
               // fix browsers whose `exec` methods don't consistently return `undefined` for nonparticipating capturing groups
               if (!cbSplit._compliantExecNpcg && match.length > 1) {
                   match[0].replace(separator2, function () {
@@ -433,24 +439,24 @@ if (!cbSplit) {
                       }
                   });
               }
-  
+
               if (match.length > 1 && match.index < str.length) {
                   Array.prototype.push.apply(output, match.slice(1));
               }
-  
+
               lastLength = match[0].length;
               lastLastIndex = lastIndex;
-  
+
               if (output.length >= limit) {
                   break;
               }
           }
-  
+
           if (separator.lastIndex === match.index) {
               separator.lastIndex++; // avoid an infinite loop
           }
       }
-  
+
       if (lastLastIndex === str.length) {
           if (lastLength || !separator.test("")) {
               output.push("");
@@ -458,10 +464,10 @@ if (!cbSplit) {
       } else {
           output.push(str.slice(lastLastIndex));
       }
-  
+
       return output.length > limit ? output.slice(0, limit) : output;
   };
-  
+
   cbSplit._compliantExecNpcg = /()??/.exec("")[1] === undefined; // NPCG: nonparticipating capturing group
   cbSplit._nativeSplit = String.prototype.split;
 
@@ -471,4 +477,4 @@ String.prototype.split = function (separator, limit) {
 };
 
 })(jQuery);
-                
+
