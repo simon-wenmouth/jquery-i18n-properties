@@ -248,7 +248,7 @@ $.i18n.browserLang = function() {
 function loadAndParseFile(filename, settings) {
 	return $.ajax({
         url:        filename,
-        async:      false,
+        async:      true,
         cache:		settings.cache,
         contentType:'text/plain;charset='+ settings.encoding,
         dataType:   'text',
